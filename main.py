@@ -8,7 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
 # --- НАСТРОЙКИ ---
-API_TOKEN = "8485665573:AAHl6NeWUyCmE_3jpTmptA0PJBl1lykoC_I"
+API_TOKEN = 8485665573:AAHl6NeWUyCmE_3jpTmptA0PJBl1lykoC_I
 ADMIN_ID = 7287689795
 
 logging.basicConfig(level=logging.INFO)
@@ -26,24 +26,26 @@ class Form(StatesGroup):
     age = State()
     city = State()
 
-@dp.message.handler(Command("start"))
+# ИСПРАВЛЕНО: теперь используем @dp.message(Command("start"))
+@dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await message.answer("Привет! 👋 Как тебя зовут?")
     await state.set_state(Form.name)
 
-@dp.message_handler(Form.name)
+# ИСПРАВЛЕНО: теперь используем @dp.message(Form.name)
+@dp.message(Form.name)
 async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
     await message.answer("Сколько тебе лет?")
     await state.set_state(Form.age)
 
-@dp.message_handler(Form.age)
+@dp.message(Form.age)
 async def process_age(message: types.Message, state: FSMContext):
     await state.update_data(age=message.text)
     await message.answer("Из какого ты города?")
     await state.set_state(Form.city)
 
-@dp.message_handler(Form.city)
+@dp.message(Form.city)
 async def process_city(message: types.Message, state: FSMContext):
     data = await state.get_data()
     name = data['name']
@@ -52,15 +54,17 @@ async def process_city(message: types.Message, state: FSMContext):
     tg_id = message.from_user.id
     username = f"@{message.from_user.username}" if message.from_user.username else "нет ника"
 
-    # Сохранение
     cursor.execute("INSERT INTO users (tg_id, username, name, age, city) VALUES (?, ?, ?, ?, ?)",
                    (tg_id, username, name, age, city))
     conn.commit()
 
-    # Уведомление админу
     admin_text = (f"🔔 Новая анкета!\n\n👤 Имя: {name}\n🎂 Возраст: {age}\n"
                   f"🏙 Город: {city}\n📎 Ник: {username}")
-    await bot.send_message(ADMIN_ID, admin_text)
+    
+    try:
+        await bot.send_message(ADMIN_ID, admin_text)
+    except Exception as e:
+        logging.error(f"Ошибка отправки админу: {e}")
 
     await message.answer("✅ Данные сохранены! Спасибо.")
     await state.clear()
