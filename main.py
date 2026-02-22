@@ -26,23 +26,42 @@ class Form(StatesGroup):
     age = State()
     city = State()
 
+# Команда /start
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await message.answer("Привет! 👋 Как тебя зовут?")
     await state.set_state(Form.name)
 
+# Команда /list
+@dp.message(Command("list"))
+async def cmd_list(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    cursor.execute("SELECT name, username, city FROM users")
+    users = cursor.fetchall()
+    if not users:
+        await message.answer("База данных пока пуста.")
+    else:
+        text = "📋 Список анкет:\n\n"
+        for u in users:
+            text += f"👤 {u[0]} ({u[1]}) - {u[2]}\n"
+        await message.answer(text)
+
+# Обработка имени
 @dp.message(Form.name)
 async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
     await message.answer("Сколько тебе лет?")
     await state.set_state(Form.age)
 
+# Обработка возраста
 @dp.message(Form.age)
 async def process_age(message: types.Message, state: FSMContext):
     await state.update_data(age=message.text)
     await message.answer("Из какого ты города?")
     await state.set_state(Form.city)
 
+# Финал анкеты
 @dp.message(Form.city)
 async def process_city(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -52,26 +71,23 @@ async def process_city(message: types.Message, state: FSMContext):
     tg_id = message.from_user.id
     username = f"@{message.from_user.username}" if message.from_user.username else "нет ника"
 
-    # Сохранение в базу
     cursor.execute("INSERT INTO users (tg_id, username, name, age, city) VALUES (?, ?, ?, ?, ?)",
                    (tg_id, username, name, age, city))
     conn.commit()
 
-    # Текст для тебя
-    admin_text = (f"🔔 Новая анкета!\n\n👤 Имя: {name}\n🎂 Возраст: {age}\n"
-                  f"🏙 Город: {city}\n📎 Ник: {username}")
+    admin_text = f"🔔 Новая анкета!\n👤 {name}, {age} лет\n🏙 {city}\n📎 {username}"
     
-    # Пытаемся отправить тебе сообщение
     try:
-        await bot.send_message(chat_id=ADMIN_ID, text=admin_text)
-        print(f"Уведомление отправлено админу {ADMIN_ID}")
+        await bot.send_message(ADMIN_ID, admin_text)
     except Exception as e:
-        print(f"ОШИБКА ОТПРАВКИ АДМИНУ: {e}")
+        logging.error(f"Ошибка уведомления: {e}")
 
     await message.answer("✅ Данные сохранены! Спасибо.")
     await state.clear()
 
 async def main():
+    # Важно: удаляем вебхуки перед запуском, чтобы не было конфликтов
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
