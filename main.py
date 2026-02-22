@@ -1,19 +1,21 @@
+import asyncio
 import logging
 import sqlite3
-import asyncio
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
 
+# --- НАСТРОЙКИ ---
 API_TOKEN = "8485665573:AAHl6NeWUyCmE_3jpTmptA0PJBl1lykoC_I"
 ADMIN_ID = 7287689795
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot, storage=MemoryStorage())
+dp = Dispatcher(storage=MemoryStorage())
 
+# --- БАЗА ДАННЫХ ---
 conn = sqlite3.connect('anketa.db', check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, tg_id INTEGER, username TEXT, name TEXT, age TEXT, city TEXT)')
@@ -24,45 +26,47 @@ class Form(StatesGroup):
     age = State()
     city = State()
 
-@dp.message_handler(commands='start')
-async def start(message: types.Message):
-    await message.answer("Привет! Как тебя зовут?")
-    await Form.name.set()
+@dp.message.handler(Command("start"))
+async def cmd_start(message: types.Message, state: FSMContext):
+    await message.answer("Привет! 👋 Как тебя зовут?")
+    await state.set_state(Form.name)
 
-@dp.message_handler(state=Form.name)
+@dp.message_handler(Form.name)
 async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
     await message.answer("Сколько тебе лет?")
-    await Form.age.set()
+    await state.set_state(Form.age)
 
-@dp.message_handler(state=Form.age)
+@dp.message_handler(Form.age)
 async def process_age(message: types.Message, state: FSMContext):
     await state.update_data(age=message.text)
     await message.answer("Из какого ты города?")
-    await Form.city.set()
+    await state.set_state(Form.city)
 
-@dp.message_handler(state=Form.city)
+@dp.message_handler(Form.city)
 async def process_city(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    user_info = {
-        "tg_id": message.from_user.id,
-        "username": f"@{message.from_user.username}" if message.from_user.username else "нет ника",
-        "name": data['name'],
-        "age": data['age'],
-        "city": message.text
-    }
-    
+    name = data['name']
+    age = data['age']
+    city = message.text
+    tg_id = message.from_user.id
+    username = f"@{message.from_user.username}" if message.from_user.username else "нет ника"
+
+    # Сохранение
     cursor.execute("INSERT INTO users (tg_id, username, name, age, city) VALUES (?, ?, ?, ?, ?)",
-                   (user_info["tg_id"], user_info["username"], user_info["name"], user_info["age"], user_info["city"]))
+                   (tg_id, username, name, age, city))
     conn.commit()
 
-    # Уведомление тебе в личку
-    admin_text = (f"🔔 Новая анкета!\n\n👤 Имя: {user_info['name']}\n🎂 Возраст: {user_info['age']}\n"
-                  f"🏙 Город: {user_info['city']}\n📎 Ник: {user_info['username']}")
+    # Уведомление админу
+    admin_text = (f"🔔 Новая анкета!\n\n👤 Имя: {name}\n🎂 Возраст: {age}\n"
+                  f"🏙 Город: {city}\n📎 Ник: {username}")
     await bot.send_message(ADMIN_ID, admin_text)
 
-    await message.answer("✅ Готово! Данные сохранены.")
-    await state.finish()
+    await message.answer("✅ Данные сохранены! Спасибо.")
+    await state.clear()
+
+async def main():
+    await dp.start_polling(bot)
 
 if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True)
+    asyncio.run(main())
