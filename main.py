@@ -8,7 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
 # --- НАСТРОЙКИ ---
-API_TOKEN = 8485665573:AAHl6NeWUyCmE_3jpTmptA0PJBl1lykoC_I
+API_TOKEN = "8485665573:AAHl6NeWUyCmE_3jpTmptA0PJBl1lykoC_I"
 ADMIN_ID = 7287689795
 
 logging.basicConfig(level=logging.INFO)
