@@ -8,7 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
 # --- НАСТРОЙКИ ---
-API_TOKEN = "8485665573:AAHl6NeWUyCmE_3jpTmptA0PJBl1lykoC_I"
+API_TOKEN = "8485665573:AAHl6NewUyCmE_3jpTmptAOPJB1llykoC_I"
 ADMIN_ID = 7287689795
 
 logging.basicConfig(level=logging.INFO)
@@ -26,13 +26,11 @@ class Form(StatesGroup):
     age = State()
     city = State()
 
-# ИСПРАВЛЕНО: теперь используем @dp.message(Command("start"))
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await message.answer("Привет! 👋 Как тебя зовут?")
     await state.set_state(Form.name)
 
-# ИСПРАВЛЕНО: теперь используем @dp.message(Form.name)
 @dp.message(Form.name)
 async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
@@ -48,23 +46,27 @@ async def process_age(message: types.Message, state: FSMContext):
 @dp.message(Form.city)
 async def process_city(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    name = data['name']
-    age = data['age']
+    name = data.get('name')
+    age = data.get('age')
     city = message.text
     tg_id = message.from_user.id
     username = f"@{message.from_user.username}" if message.from_user.username else "нет ника"
 
+    # Сохранение в базу
     cursor.execute("INSERT INTO users (tg_id, username, name, age, city) VALUES (?, ?, ?, ?, ?)",
                    (tg_id, username, name, age, city))
     conn.commit()
 
+    # Текст для тебя
     admin_text = (f"🔔 Новая анкета!\n\n👤 Имя: {name}\n🎂 Возраст: {age}\n"
                   f"🏙 Город: {city}\n📎 Ник: {username}")
     
+    # Пытаемся отправить тебе сообщение
     try:
-        await bot.send_message(ADMIN_ID, admin_text)
+        await bot.send_message(chat_id=ADMIN_ID, text=admin_text)
+        print(f"Уведомление отправлено админу {ADMIN_ID}")
     except Exception as e:
-        logging.error(f"Ошибка отправки админу: {e}")
+        print(f"ОШИБКА ОТПРАВКИ АДМИНУ: {e}")
 
     await message.answer("✅ Данные сохранены! Спасибо.")
     await state.clear()
